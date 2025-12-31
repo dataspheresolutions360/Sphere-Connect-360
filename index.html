@@ -92,7 +92,7 @@
     <header>
         <h2>📊 SphereConnect 360 <span class="subtitle">by Data Sphere Solutions</span></h2>
         <div>
-            <span style="font-size:0.8em; color:green; font-weight:bold; margin-right:10px;">🟢 Live Sync</span>
+            <span style="font-size:0.8em; color:green; font-weight:bold; margin-right:10px;">🟢 Live Sync (sphere360)</span>
             <button class="btn btn-dark" onclick="backupData()">⬇ Backup</button>
             <input type="file" id="importFile" style="display:none" onchange="restoreData(this)">
             <button class="btn btn-dark" onclick="document.getElementById('importFile').click()">⬆ Restore</button>
@@ -234,19 +234,23 @@
     const dbFS = firebase.firestore();
     const analytics = firebase.analytics();
 
+    // *** NEW CORE REFERENCE ***
+    // This places all data inside the "sphere360" collection, under the "main" document.
+    const rootRef = dbFS.collection("sphere360").doc("main");
+
     // --- 2. LOCAL STATE MIRROR ---
     let db = { types: [], apps: [], clients: [] };
 
-    // --- 3. REALTIME LISTENERS ---
-    dbFS.collection("types").onSnapshot(snap => {
+    // --- 3. REALTIME LISTENERS (UPDATED TO USE rootRef) ---
+    rootRef.collection("types").onSnapshot(snap => {
         db.types = snap.docs.map(d => ({id: d.id, ...d.data()}));
         refreshAll();
     });
-    dbFS.collection("apps").onSnapshot(snap => {
+    rootRef.collection("apps").onSnapshot(snap => {
         db.apps = snap.docs.map(d => ({id: d.id, ...d.data()}));
         refreshAll();
     });
-    dbFS.collection("clients").onSnapshot(snap => {
+    rootRef.collection("clients").onSnapshot(snap => {
         db.clients = snap.docs.map(d => ({id: d.id, ...d.data()}));
         refreshAll();
     });
@@ -256,17 +260,17 @@
         populateDropdowns(); renderTypes(); renderApps(); renderClients(); runFilter(); renderDashboard();
     }
 
-    // Business Types
+    // Business Types (Updated to use rootRef)
     window.saveType = function() {
         const id = document.getElementById('tId').value; 
         const name = document.getElementById('tName').value;
         if(!name) return;
         
-        if(id) { dbFS.collection("types").doc(id).update({name}); } 
-        else { dbFS.collection("types").add({name}); }
+        if(id) { rootRef.collection("types").doc(id).update({name}); } 
+        else { rootRef.collection("types").add({name}); }
         resetTypeForm();
     };
-    window.deleteType = function(id) { if(confirm('Delete Type?')) dbFS.collection("types").doc(id).delete(); };
+    window.deleteType = function(id) { if(confirm('Delete Type?')) rootRef.collection("types").doc(id).delete(); };
     window.editType = function(id) {
         const t = db.types.find(x=>x.id==id);
         document.getElementById('tId').value = t.id; 
@@ -283,7 +287,7 @@
         document.getElementById('tCancel').style.display="none";
     };
 
-    // Apps
+    // Apps (Updated to use rootRef)
     window.saveApp = function() {
         const id = document.getElementById('aId').value;
         const name = document.getElementById('aName').value;
@@ -291,11 +295,11 @@
         const link = document.getElementById('aLink').value;
         if(!name || !typeId) return;
 
-        if(id) { dbFS.collection("apps").doc(id).update({name, typeId, link}); }
-        else { dbFS.collection("apps").add({name, typeId, link}); }
+        if(id) { rootRef.collection("apps").doc(id).update({name, typeId, link}); }
+        else { rootRef.collection("apps").add({name, typeId, link}); }
         resetAppForm();
     };
-    window.deleteApp = function(id) { if(confirm('Delete App?')) dbFS.collection("apps").doc(id).delete(); };
+    window.deleteApp = function(id) { if(confirm('Delete App?')) rootRef.collection("apps").doc(id).delete(); };
     window.editApp = function(id) {
         const a = db.apps.find(x=>x.id==id);
         document.getElementById('aId').value = a.id; 
@@ -315,7 +319,7 @@
         document.getElementById('aCancel').style.display="none";
     };
 
-    // Clients
+    // Clients (Updated to use rootRef)
     window.saveClient = function() {
         const id = document.getElementById('cId').value;
         const n = document.getElementById('cName').value;
@@ -324,12 +328,12 @@
         const t = document.getElementById('cType').value;
         if(!n) return;
 
-        if(id) { dbFS.collection("clients").doc(id).update({name:n, phone:p, email:e, typeId:t}); }
-        else { dbFS.collection("clients").add({name:n, phone:p, email:e, typeId:t, status:'New', date: new Date().toISOString()}); }
+        if(id) { rootRef.collection("clients").doc(id).update({name:n, phone:p, email:e, typeId:t}); }
+        else { rootRef.collection("clients").add({name:n, phone:p, email:e, typeId:t, status:'New', date: new Date().toISOString()}); }
         resetClientForm();
     };
-    window.deleteClient = function(id) { if(confirm('Delete Client?')) dbFS.collection("clients").doc(id).delete(); };
-    window.updateStatus = function(id, newStatus) { dbFS.collection("clients").doc(id).update({status: newStatus}); };
+    window.deleteClient = function(id) { if(confirm('Delete Client?')) rootRef.collection("clients").doc(id).delete(); };
+    window.updateStatus = function(id, newStatus) { rootRef.collection("clients").doc(id).update({status: newStatus}); };
     window.editClient = function(id) {
         const c = db.clients.find(x=>x.id==id);
         document.getElementById('cId').value = c.id; 
@@ -515,10 +519,13 @@
 
     window.sendWA = function(phone, name, bus, appName, link, id) {
         if(!phone) return alert("No phone");
+        
+        // UPDATE: Check for Contacted status update
         const c = db.clients.find(x=>x.id==id);
         if(c && c.status === 'New') {
-            dbFS.collection("clients").doc(id).update({status: 'Contacted'});
+            rootRef.collection("clients").doc(id).update({status: 'Contacted'});
         }
+
         let msg = document.getElementById('msgTemplate').value;
         msg = msg.replace(/{name}/g, name)
                  .replace(/{business}/g, bus)
@@ -556,7 +563,6 @@
     };
 
     // --- 8. LOGIN LOGIC ---
-    // (Ensure this password is secure for actual deployment)
     const DEMO_PASS = "demo360";
 
     // Check session
@@ -576,7 +582,7 @@
         }
     };
 
-    // Backup/Restore (Local only, not cloud)
+    // Backup/Restore
     window.backupData = function() { 
         const a=document.createElement('a'); 
         a.href="data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db)); 
@@ -590,7 +596,7 @@
                 // This updates local state only - does NOT overwrite cloud
                 db=JSON.parse(e.target.result); 
                 refreshAll(); 
-                alert("Restored locally (not synced to cloud). To sync, add items manually.");
+                alert("Restored locally. Use manual entry to sync to new folder structure if needed.");
             }catch{alert("Error");}
         }; 
         r.readAsText(i.files[0]); 
